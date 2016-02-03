@@ -4,8 +4,11 @@ import time
 import json
 import logging
 from string import punctuation
+from jarstore import JarStore
 
 from slackclient import SlackClient
+
+CENTS_PER_SWEAR = 20
 
 # Globals
 bad_words = {}
@@ -53,9 +56,16 @@ def get_user_info(user_id):
         return None
 
 
+def current_jar_total():
+    global jar_store
+    swears = jar_store.get_swear_total()
+    return "$%.2f" % (float(swears) * CENTS_PER_SWEAR / 100.0)
+
+
 def process_message(msg):
     global bot_sc
     global sent_msg_id
+    global jar_store
 
     if "type" in msg:
         if msg["type"] == "message" and "text" in msg:
@@ -67,8 +77,15 @@ def process_message(msg):
                     user_name = user_object["user"]["name"]
                 else:
                     user_name = msg["user"]
+
+                # Add to the swear jar
+                for swear_word in swear_words:
+                    jar_store.add_swear(msg["user"], user_name, swear_word)
                 # send a reply (TODO: send picture with web API)
-                bot_sc.rtm_send_message(channel=msg["channel"], message="Oooo - %s said %s" % (user_name, " ".join(swear_words)))
+                bot_sc.rtm_send_message(channel=msg["channel"],
+                                        message="Oooo - %s said %s. Swear Jar is up to %s" % (user_name,
+                                                                                              " ".join(swear_words),
+                                                                                              current_jar_total()))
                 sent_msg_id += 1
 
 
@@ -85,10 +102,8 @@ if __name__ == '__main__':
         for word in fd:
             bad_words[word.strip()] = True
 
-    if 'adult' in bad_words:
-        print "adult is a bad word"
-    else:
-        print "no adult"
+    jar_store = JarStore("swearjar.sqlite")
+    jar_store.open_db()
 
     logging.info("bot token is [%s]" % bot_token)
     logging.info("user token is [%s]" % user_token)
