@@ -1,0 +1,5 @@
+{
+  "README": "Copy this file to settings.json and replace with your bot and user tokens",
+  "bot_token": "xoxb-fooooooo-fooooooo",
+  "user_token": "xoxp-fooooooo-fooooooo-fooooooo-fooooooo"
+}
