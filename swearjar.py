@@ -84,6 +84,7 @@ def process_direct_message(msg):
 
     # extract the command part
     user_id = msg["user"]
+    user_name = user_id_to_name(user_id)
     bot_id_regexp = "<@%s>: (.*)$" % bot_user_id
     logging.info("regexp is [%s]" % bot_id_regexp)
     p = re.compile(bot_id_regexp)
@@ -92,15 +93,15 @@ def process_direct_message(msg):
         command = m.group(1)
         logging.info("You said [%s] to swearjar" % command)
 
-        help_reply_text = ("Welcome to SwearJar, turning your @#$%! into $$$$\n"
-                           "\n"
+        help_reply_text = ("Welcome to SwearJar, turning your @#$%! into $$$$\n\n"
                            "Things you can ask/tell me:\n\n"
                            "help - this text.\n"
                            "total - print the swear jar total.\n"
                            "leaders - print who is swearing the most.\n"
-                           "my swears - list all my swearing.\n"
+                           "my swearing - list all my swearing.\n"
+                           "insult - Random cursing.\n"
                            "<word> is not a swear word - remove <word> from list of naughty words.\n"
-                           "<word> is a  swear word - add <word> to the list of naughty words.\n"
+                           "<word> is a swear word - add <word> to the list of naughty words.\n"
                            "what's the damage - list how much you owe.\n"
                            "pay $nn.nn - record that you paid some money to the swear jar."
                            )
@@ -113,10 +114,14 @@ def process_direct_message(msg):
             logging.debug("What's the damage for [%s]" % user_id)
             fines = jar_store.get_money_owed(user_id) / 100.0
             payments = jar_store.get_money_paid(user_id) / 100.0
-            reply_text = "%s has $%.2f in files, and has paid $%.2f, so they owe $%.2f" % (user_id_to_name(user_id),
+            reply_text = "%s has $%.2f in files, and has paid $%.2f, so they owe $%.2f" % (user_name,
                                                                                            fines,
                                                                                            payments,
                                                                                            fines - payments)
+        elif command.startswith("my swear"):
+            reply_text = "Recent cursing from %s:\n\n" % user_name
+            for swear in jar_store.get_swears(user_id):
+                reply_text += "%s : %s\n" % (swear[0], swear[1])
         else:
             reply_text = "I don't understand that (try \"help\")"
 

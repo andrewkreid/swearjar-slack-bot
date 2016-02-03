@@ -85,6 +85,17 @@ class JarStore:
                 payments = 0
         return payments
 
+    def get_swears(self, user_id, limit=10):
+        with self._conn:
+            sql = self._conn.execute(
+                "SELECT when_swore, swear_word FROM swears WHERE user_id = ? ORDER BY when_swore DESC LIMIT ?",
+                [user_id, limit])
+            retval = []
+            for row in sql:
+                retval.append(row)
+        return retval
+
+
 
 
 
