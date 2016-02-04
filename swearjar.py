@@ -95,6 +95,7 @@ def process_direct_message(msg):
     logging.info("regexp is [%s]" % bot_id_regexp)
     p = re.compile(bot_id_regexp)
     m = p.match(msg["text"])
+    reply_text = "I don't understand that (try \"help\")"
     if m:
         command = m.group(1)
         logging.info("You said [%s] to swearjar" % command)
@@ -153,6 +154,20 @@ def process_direct_message(msg):
                     reply_text = "\"%s\" isn't a rude word." % remove_word
             else:
                 reply_text = "Try saying \"foo is not a dirty word\"."
+        elif command.startswith("pay "):
+            # possible payment. Try and parse an amount
+            payp = re.compile('pay \$([-\d\.]+)')
+            paym = payp.match(command)
+            if paym:
+                try:
+                    payment_dollars = float(paym.group(1))
+                    payment_cents = int(payment_dollars * 100.0)
+                    jar_store.add_payment(user_id, user_name, payment_cents)
+                    reply_text = "%s paid $%.2f to the swear jar." % (user_name, payment_dollars)
+                except ValueError:
+                    reply_text = "I can't turn \"%s\" into a dollar amount." % command
+            else:
+                reply_text = "Can't parse: try \"pay $dd.dd\""
         else:
             reply_text = "I don't understand that (try \"help\")"
 
@@ -186,18 +201,21 @@ def process_message(msg):
                         # Add to the swear jar
                         for swear_word in swear_words:
                             jar_store.add_swear(msg["user"], user_name, swear_word, CENTS_PER_SWEAR)
-                        # send a reply (TODO: send picture with web API)
-                        reply_text = "Oooo - %s said %s. Swear Jar is up to %s" % (user_name,
-                                                                                   " ".join(swear_words),
-                                                                                   current_jar_total())
+                        if "millenial" in swear_words or "millennial" in swear_words:
+                            reply_text = ("OMG! #sogross that you said *%s*! I can't even..."
+                                          " :peach: :pizza: :turtle: :bear: :yellow_heart:" % " ".join(swear_words))
+                        else:
+                            reply_text = "Oooo - %s said *%s* :cry:. Swear Jar is up to %s" % (user_name,
+                                                                                               " ".join(swear_words),
+                                                                                               current_jar_total())
                         bot_sc.rtm_send_message(channel=msg["channel"], message=reply_text)
                         sent_msg_id += 1
 
                         # Now add a reaction to the message
-                        resp = bot_sc.api_call(method="reactions.add",
-                                               channel=msg["channel"],
-                                               name="poop",
-                                               timestamp=msg["ts"])
+                        bot_sc.api_call(method="reactions.add",
+                                        channel=msg["channel"],
+                                        name="poop",
+                                        timestamp=msg["ts"])
 
                         # check if we need to call on the captain
                         this_minute_no = datetime.now().minute
@@ -227,10 +245,9 @@ def process_message(msg):
                                 logging.debug(resp)
                                 swears_this_minute = 0
 
-
         elif msg["type"] == "presence_change" and "user" in msg:
-            """We get one of these after we start the bot saying the bot has joined the channel.
-               We use this to find out the bot's user ID"""
+            # We get one of these after we start the bot saying the bot has joined the channel.
+            #  We use this to find out the bot's user ID
             user_name = user_id_to_name(msg["user"])
             logging.debug("user %s(%s)'s status changed to %s" % (msg["user"], user_name, msg["presence"]))
 

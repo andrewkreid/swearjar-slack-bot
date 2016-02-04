@@ -104,3 +104,14 @@ class JarStore:
             for row in sql:
                 retval.append(row)
         return retval
+
+    def add_payment(self, user_id, user_name, cents):
+        with self._conn:
+            args = [
+                user_id,
+                user_name,
+                datetime.datetime.now().isoformat(),
+                cents
+                ]
+            self._conn.execute("INSERT INTO payments (user_id, user_name, when_paid, cents) VALUES (?, ?, ?, ?)",
+                               args)
