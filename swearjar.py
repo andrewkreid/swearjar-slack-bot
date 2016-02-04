@@ -275,11 +275,15 @@ if __name__ == '__main__':
     user_sc = SlackClient(user_token)
     if bot_sc.rtm_connect():
         while True:
-            messages = bot_sc.rtm_read()
-            for message in messages:
-                logging.debug(message)
-                process_message(message)
-            time.sleep(1)
+            try:
+                messages = bot_sc.rtm_read()
+                for message in messages:
+                    logging.debug(message)
+                    process_message(message)
+                time.sleep(1)
+            except Exception, e:
+                logging.error("Something Failed")
+                logging.error(e)
     else:
         logging.error("Connection Failed, invalid token")
 
