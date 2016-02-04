@@ -6,6 +6,7 @@ import logging
 import re
 from string import punctuation
 from jarstore import JarStore
+from datetime import datetime
 
 from slackclient import SlackClient
 
@@ -17,6 +18,10 @@ bad_words = {}
 known_users = {}
 sent_msg_id = 1
 bot_user_id = 'U0L4KJ8MV'
+
+# for keeping track of the number of swears this minute
+swears_this_minute = 0
+swear_minute_no = 0
 
 
 def tokenize_to_words(msg_text):
@@ -81,11 +86,12 @@ def process_direct_message(msg):
     global bot_sc
     global jar_store
     global bot_user_id
+    global bad_words
 
     # extract the command part
     user_id = msg["user"]
     user_name = user_id_to_name(user_id)
-    bot_id_regexp = "<@%s>: (.*)$" % bot_user_id
+    bot_id_regexp = "<@%s>:* (.*)$" % bot_user_id
     logging.info("regexp is [%s]" % bot_id_regexp)
     p = re.compile(bot_id_regexp)
     m = p.match(msg["text"])
@@ -100,8 +106,8 @@ def process_direct_message(msg):
                            "leaders - print who is swearing the most.\n"
                            "my swearing - list all my swearing.\n"
                            "insult - Random cursing.\n"
-                           "<word> is not a swear word - remove <word> from list of naughty words.\n"
-                           "<word> is a swear word - add <word> to the list of naughty words.\n"
+                           "<word> is not a dirty word - remove <word> from list of naughty words.\n"
+                           "<word> is a dirty word - add <word> to the list of naughty words.\n"
                            "what's the damage - list how much you owe.\n"
                            "pay $nn.nn - record that you paid some money to the swear jar."
                            )
@@ -121,17 +127,44 @@ def process_direct_message(msg):
         elif command.startswith("my swear"):
             reply_text = "Recent cursing from %s:\n\n" % user_name
             for swear in jar_store.get_swears(user_id):
-                reply_text += "%s : %s\n" % (swear[0], swear[1])
+                reply_text += "  %s : %s\n" % (swear[0], swear[1])
+        elif command.startswith("insult"):
+            reply_text = "I wasn't brave enough to implement this. Have you SEEN the list?"
+        elif command.startswith("leaders"):
+            reply_text = "Current profanity leaders:\n\n"
+            for leader in jar_store.get_leaders():
+                reply_text += "$%4.2f : %s\n" % (leader[0] / 100.0, leader[1])
+        elif "is a dirty word" in command:
+            tokens = tokenize_to_words(command)
+            if tokens[1] == "is":
+                new_word = tokens[0]
+                bad_words[new_word] = True
+                reply_text = "Ok, I'll add \"%s\" to the list. Try and avoid it from now on." % new_word
+            else:
+                reply_text = "Try saying \"foo is a dirty word\"."
+        elif "is not a dirty word" in command:
+            tokens = tokenize_to_words(command)
+            if tokens[1] == "is":
+                remove_word = tokens[0]
+                if remove_word in bad_words:
+                    del bad_words[remove_word]
+                    reply_text = "Ok, I'll remove \"%s\" from the list." % remove_word
+                else:
+                    reply_text = "\"%s\" isn't a rude word." % remove_word
+            else:
+                reply_text = "Try saying \"foo is not a dirty word\"."
         else:
             reply_text = "I don't understand that (try \"help\")"
 
-        bot_sc.rtm_send_message(channel=msg["channel"], message=reply_text)
+    bot_sc.rtm_send_message(channel=msg["channel"], message=reply_text)
 
 
 def process_message(msg):
     global bot_sc
     global sent_msg_id
     global jar_store
+    global swears_this_minute
+    global swear_minute_no
 
     if "type" in msg:
         if msg["type"] == "message" and "text" in msg:
@@ -154,11 +187,47 @@ def process_message(msg):
                         for swear_word in swear_words:
                             jar_store.add_swear(msg["user"], user_name, swear_word, CENTS_PER_SWEAR)
                         # send a reply (TODO: send picture with web API)
-                        bot_sc.rtm_send_message(channel=msg["channel"],
-                                                message="Oooo - %s said %s. Swear Jar is up to %s" % (user_name,
-                                                                                                      " ".join(swear_words),
-                                                                                                      current_jar_total()))
+                        reply_text = "Oooo - %s said %s. Swear Jar is up to %s" % (user_name,
+                                                                                   " ".join(swear_words),
+                                                                                   current_jar_total())
+                        bot_sc.rtm_send_message(channel=msg["channel"], message=reply_text)
                         sent_msg_id += 1
+
+                        # Now add a reaction to the message
+                        resp = bot_sc.api_call(method="reactions.add",
+                                               channel=msg["channel"],
+                                               name="poop",
+                                               timestamp=msg["ts"])
+
+                        # check if we need to call on the captain
+                        this_minute_no = datetime.now().minute
+                        logging.info("minute: %d, %d count: %d" % (this_minute_no, swear_minute_no, swears_this_minute))
+                        if this_minute_no != swear_minute_no:
+                            # reset count
+                            swear_minute_no = this_minute_no
+                            swears_this_minute = 0
+                        else:
+                            swears_this_minute += 1
+                            if swears_this_minute >= 5:
+                                # OK, we need to step in
+                                attachments = [
+                                    {
+                                        "fallback": "Hey! Too much swearing",
+                                        "color": "#FF0000",
+                                        "pretext": "",
+                                        "image_url": "https://raw.githubusercontent.com/andrewkreid/swearjar-slack-bot/master/language.gif"
+                                    }
+                                ]
+                                resp = bot_sc.api_call(method="chat.postMessage",
+                                                       channel=msg["channel"],
+                                                       text="Hey! Calm it down (>5 swears in the last minute)!",
+                                                       as_user=True,
+                                                       attachments=json.dumps(attachments))
+                                logging.debug(json.dumps(attachments))
+                                logging.debug(resp)
+                                swears_this_minute = 0
+
+
         elif msg["type"] == "presence_change" and "user" in msg:
             """We get one of these after we start the bot saying the bot has joined the channel.
                We use this to find out the bot's user ID"""
@@ -193,7 +262,7 @@ if __name__ == '__main__':
             for message in messages:
                 logging.debug(message)
                 process_message(message)
-            time.sleep(3)
+            time.sleep(1)
     else:
         logging.error("Connection Failed, invalid token")
 

@@ -85,7 +85,7 @@ class JarStore:
                 payments = 0
         return payments
 
-    def get_swears(self, user_id, limit=10):
+    def get_swears(self, user_id, limit=20):
         with self._conn:
             sql = self._conn.execute(
                 "SELECT when_swore, swear_word FROM swears WHERE user_id = ? ORDER BY when_swore DESC LIMIT ?",
@@ -95,9 +95,12 @@ class JarStore:
                 retval.append(row)
         return retval
 
-
-
-
-
-
-
+    def get_leaders(self):
+        with self._conn:
+            sql = self._conn.execute(
+                "SELECT SUM(cents) as total, user_name FROM swears GROUP BY user_name ORDER BY total DESC"
+            )
+            retval = []
+            for row in sql:
+                retval.append(row)
+        return retval
